@@ -1,7 +1,7 @@
 ---
 id: t-twvb1m
 title: 'vite-plugin-plain-css-modules: readable CSS-module class names with a built-in collision guard'
-status: review
+status: done
 priority: medium
 author: mb-777f7ebc
 assignee: mb-777f7ebc
