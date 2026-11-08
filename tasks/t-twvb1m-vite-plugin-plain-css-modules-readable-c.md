@@ -1,7 +1,7 @@
 ---
 id: t-twvb1m
 title: 'vite-plugin-plain-css-modules: readable CSS-module class names with a built-in collision guard'
-status: in-progress
+status: review
 priority: medium
 author: mb-777f7ebc
 assignee: mb-777f7ebc
@@ -39,3 +39,11 @@ created: '2026-11-08T18:00:16.879Z'
 - **Freshness of the name map.** A `transform` hook (`enforce: 'pre'`, runs before `vite:css`) drops a CSS module's recorded class names before each compile, so a file whose local classes changed or vanished (rules turned `:global`, emptied) never keeps stale names.
 - **Build owns its graph.** `buildEnd` reports only files in `this.getModuleIds()`: a file still on disk but no longer imported (`build --watch` after an import is removed) stops counting. Dev keeps a file until it is deleted or the server restarts — a module dropped from imports stays in Vite's dev module graph too; accepted, documented in README.
 - **Proof additions.** Naming table test (extensions, `?query`, Windows path, leading digit, route file, pairs equal after sanitizing) with amiro's function as oracle on its own inputs. Browser proof in a real Chromium (playwright-core): collision present at page open → `console.error`; collision introduced after load → `console.error`; collision removed → `console.info`; dev server with `base: '/app/'`. `build --watch` test: add conflicting import → error, remove import (file stays) → green rebuild. Exact-name collision test via `A_b`/`A`.
+
+## План — vitest
+A consumer's `vite.config.ts` also drives vitest, whose `pre` plugins (`vitest`, `vitest:project`) assign their own `css.modules.generateScopedName` (`classNameStrategy`, default `stable`). Plugin left active → the consumer's whole unit run dies on the "already set" refusal. Fork: env `VITEST` vs plugin names → plugin names. `process.env.VITEST` is set in every vitest process, including one that calls `build()` itself (this package's own tests), so it would switch the guard off silently there. When a vitest plugin is in the config, the plugin is inactive (no naming, no guard). Proof: a real `vitest run` subprocess on a fixture whose config carries the plugin and whose test imports a CSS module; red without the guard (checked once by disabling it).
+
+## Notes
+- Duplicate browser report found by the dev test: the hello answer and the post-compile broadcast carry the same text → the client prints a report only when it differs from the last one shown.
+- `transform` forget (pre) and publish (post, companion plugin `plain-css-modules:settle`) are split so a recompile never flashes "resolved" between forgetting and re-recording.
+- Live check on amiro (temporary config outside the repo, inline `generateScopedName` removed, plugin added): `vite build` CSS md5 and every asset file name equal to the original build.

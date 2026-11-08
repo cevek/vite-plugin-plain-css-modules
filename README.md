@@ -62,6 +62,20 @@ The plugin throws instead of silently doing nothing when:
 - `css.transformer` is `'lightningcss'` (Vite ignores `css.modules` there);
 - `css.modules` is `false`, or `css.modules.generateScopedName` is already set.
 
+## Vitest
+
+When the same config drives vitest, the plugin is inactive: vitest names classes itself
+(`test.css.modules.classNameStrategy`) and a test run has no page to warn.
+
+## Development
+
+```sh
+npm install
+npx playwright-core install chromium-headless-shell   # the dev tests drive a real browser
+npm run check     # typecheck + tests
+npm run release   # check, build, verify the tarball, then npm publish
+```
+
 ## License
 
 MIT

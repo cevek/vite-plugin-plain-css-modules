@@ -1,4 +1,4 @@
-import type {Plugin, ResolvedConfig, ViteDevServer} from 'vite';
+import type {Plugin, PluginOption, ResolvedConfig, ViteDevServer} from 'vite';
 import {CollisionRegistry, PLUGIN_NAME} from './collisions.js';
 import {classPrefix, isCssModule, modulePath, scopedName} from './scoped-name.js';
 
@@ -38,6 +38,9 @@ export function plainCssModules(): Plugin[] {
     let server: ViteDevServer | undefined;
     let published = '';
     let timer: ReturnType<typeof setTimeout> | undefined;
+    // Under vitest the plugin steps aside: vitest assigns its own generateScopedName (its
+    // `css.modules.classNameStrategy`) from a `pre` config hook, and a test run has no page to warn.
+    let active = true;
 
     function generateScopedName(local: string, filename: string): string {
         const name = scopedName(local, filename);
@@ -56,7 +59,7 @@ export function plainCssModules(): Plugin[] {
         transform: {
             order: 'post',
             handler(_code, id) {
-                if (isCssModule(id)) schedulePublish();
+                if (active && isCssModule(id)) schedulePublish();
                 return undefined;
             },
         },
@@ -83,6 +86,10 @@ export function plainCssModules(): Plugin[] {
         name: PLUGIN_NAME,
 
         config(userConfig) {
+            if (hasVitestPlugin(userConfig.plugins)) {
+                active = false;
+                return undefined;
+            }
             const modules = userConfig.css?.modules;
             if (modules === false) {
                 throw new Error(`[${PLUGIN_NAME}] css.modules is false; remove the plugin or enable CSS modules.`);
@@ -97,6 +104,7 @@ export function plainCssModules(): Plugin[] {
 
         configResolved(resolved) {
             config = resolved;
+            if (!active) return;
             if (resolved.css.transformer === 'lightningcss') {
                 throw new Error(
                     `[${PLUGIN_NAME}] css.transformer is 'lightningcss', which ignores css.modules; class names would stay hashed and unchecked.`,
@@ -109,6 +117,7 @@ export function plainCssModules(): Plugin[] {
         },
 
         configureServer(devServer) {
+            if (!active) return;
             server = devServer;
             devServer.ws.on(HELLO_EVENT, (_data, client) => {
                 client.send(REPORT_EVENT, collisions.report(config.root));
@@ -122,7 +131,7 @@ export function plainCssModules(): Plugin[] {
         transform: {
             order: 'pre',
             handler(_code, id) {
-                if (isCssModule(id)) collisions.forget(modulePath(id));
+                if (active && isCssModule(id)) collisions.forget(modulePath(id));
                 return undefined;
             },
         },
@@ -140,7 +149,7 @@ export function plainCssModules(): Plugin[] {
         },
 
         transformIndexHtml() {
-            if (config.command !== 'serve') return undefined;
+            if (!active || config.command !== 'serve') return undefined;
             return [
                 {
                     tag: 'script',
@@ -151,7 +160,7 @@ export function plainCssModules(): Plugin[] {
         },
 
         buildEnd(error) {
-            if (error || server) return;
+            if (!active || error || server) return;
             // Under `build --watch` the registry outlives a removed import; only this build's graph counts.
             const live = new Set(Array.from(this.getModuleIds(), modulePath));
             const report = collisions.report(config.root, (file) => live.has(file));
@@ -160,6 +169,14 @@ export function plainCssModules(): Plugin[] {
     };
 
     return [main, settle];
+}
+
+function hasVitestPlugin(plugins: PluginOption[] | undefined): boolean {
+    return (plugins ?? []).some((plugin) =>
+        Array.isArray(plugin)
+            ? hasVitestPlugin(plugin)
+            : !!plugin && 'name' in plugin && (plugin.name === 'vitest' || plugin.name === 'vitest:project'),
+    );
 }
 
 export default plainCssModules;
