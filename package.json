@@ -1,0 +1,47 @@
+{
+    "name": "vite-plugin-plain-css-modules",
+    "version": "0.1.0",
+    "description": "Readable, hash-free CSS module class names (Component_class) for Vite, with a built-in guard against two modules sharing a name",
+    "type": "module",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js"
+        }
+    },
+    "files": [
+        "dist"
+    ],
+    "keywords": [
+        "vite",
+        "vite-plugin",
+        "css-modules",
+        "class-names"
+    ],
+    "author": "cevek <x.cevek@gmail.com>",
+    "license": "MIT",
+    "engines": {
+        "node": "^20.19.0 || >=22.12.0"
+    },
+    "scripts": {
+        "build": "rm -rf dist && tsc -p tsconfig.build.json",
+        "typecheck": "tsc --noEmit",
+        "test": "vitest run",
+        "check": "npm run typecheck && npm test",
+        "prepublishOnly": "npm run check && npm run build && node scripts/verify-pack.mjs",
+        "release": "npm publish"
+    },
+    "peerDependencies": {
+        "vite": "^8.0.0"
+    },
+    "devDependencies": {
+        "@types/node": "^24.0.0",
+        "playwright-core": "^1.60.0",
+        "typescript": "~6.0.2",
+        "vite": "^8.0.14",
+        "vitest": "^4.0.0"
+    },
+    "publishConfig": {
+        "access": "public"
+    }
+}

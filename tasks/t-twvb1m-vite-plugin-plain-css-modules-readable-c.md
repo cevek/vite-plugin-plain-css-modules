@@ -33,3 +33,9 @@ created: '2026-11-08T18:00:16.879Z'
 4. misconfiguration: lightningcss and a user `generateScopedName` both throw.
 
 **Reviewers** — bug-reviewer (codex) on the full diff.
+
+## План — правки после план-ревью (mb-e12ce67f, 8b49aa8)
+- **Две проверки, не одна.** (a) policy: a prefix belongs to one file (unique basenames, catches the clash before it bites); (b) exact: a generated class name belongs to one file — `A_b.module.css .c` and `A.module.css .b_c` both give `A_b_c` with different prefixes, (a) alone misses it.
+- **Freshness of the name map.** A `transform` hook (`enforce: 'pre'`, runs before `vite:css`) drops a CSS module's recorded class names before each compile, so a file whose local classes changed or vanished (rules turned `:global`, emptied) never keeps stale names.
+- **Build owns its graph.** `buildEnd` reports only files in `this.getModuleIds()`: a file still on disk but no longer imported (`build --watch` after an import is removed) stops counting. Dev keeps a file until it is deleted or the server restarts — a module dropped from imports stays in Vite's dev module graph too; accepted, documented in README.
+- **Proof additions.** Naming table test (extensions, `?query`, Windows path, leading digit, route file, pairs equal after sanitizing) with amiro's function as oracle on its own inputs. Browser proof in a real Chromium (playwright-core): collision present at page open → `console.error`; collision introduced after load → `console.error`; collision removed → `console.info`; dev server with `base: '/app/'`. `build --watch` test: add conflicting import → error, remove import (file stays) → green rebuild. Exact-name collision test via `A_b`/`A`.
