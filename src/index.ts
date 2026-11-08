@@ -115,8 +115,10 @@ export function plainCssModules(): Plugin {
             devServer.httpServer?.once('close', () => clearTimeout(timer));
         },
 
+        // Cycles only decide which files a build counts as live; the dev server has no such filter
+        // and may start environments separately (`perEnvironmentStartEndDuringDev`).
         buildStart() {
-            collisions.nextCycle();
+            if (config.command === 'build') collisions.nextCycle();
         },
 
         watchChange(id, change) {

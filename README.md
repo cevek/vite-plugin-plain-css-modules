@@ -49,10 +49,11 @@ Where it is reported:
 | `vite` (dev) | a warning in the terminal and `console.error` in the browser; a `console.info` once it is resolved |
 
 Only modules that are actually compiled count — an unused file never trips the guard, while a file pulled in
-through `composes` does. In dev the guard errs on the loud side: a module, and every class it has declared,
-stays counted until its file is deleted or the server restarts — even if nothing imports it any more or the
-class was renamed. A compile that fails part-way never clears a standing collision. `vite build` (including
-`--watch`) counts only what the current build compiled or bundled.
+through `composes` does. The guard errs on the loud side: every class a module has ever declared stays
+counted until its file is deleted or the process restarts, so after renaming a class to fix a collision,
+restart `vite` / `vite build --watch`. A compile that fails part-way never clears a standing collision. In
+dev a module also stays counted after nothing imports it any more; `vite build` (including `--watch`) counts
+only files the current build compiled or bundled.
 
 The browser report needs Vite's HMR client and an HTML entry (`index.html`), into which the plugin injects a
 small dev-only script. Nothing is injected into the production bundle.

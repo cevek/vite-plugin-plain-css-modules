@@ -61,21 +61,19 @@ export class CollisionRegistry {
     }
 
     /**
-     * A file's names only grow within a cycle; they are replaced the first time a new build cycle
-     * names the file. Nothing narrower is safe: no compile signals "these are now all my names" —
-     * a compile can fail after naming some classes, and one file is named both directly and, read
-     * raw, through `composes`, with different class sets. The dev server runs one cycle, so a class
-     * removed from a file keeps counting until the file is deleted or the server restarts.
+     * A file's names only grow until the file is deleted (or the process restarts). Nothing
+     * narrower is safe: no compile signals "these are now all my names" — a compile can fail after
+     * naming some classes, and one file is named both directly (after Vite's preprocessors) and raw
+     * through `composes`, with different class sets, while a cached result of either stays in use.
+     * A renamed class therefore keeps counting: loud, never a silent miss.
      * Returns true when this changed the registry.
      */
     record(file: string, prefix: string, name: string): boolean {
-        let replaced = false;
-        if (this.cycleOf.has(file) && this.cycleOf.get(file) !== this.cycle) replaced = this.forget(file);
         this.cycleOf.set(file, this.cycle);
         this.prefixOf.set(file, prefix);
         const newPrefix = this.prefixes.add(prefix, file);
         const newName = this.names.add(name, file);
-        return replaced || newPrefix || newName;
+        return newPrefix || newName;
     }
 
     /** Returns true when the file was known. */
