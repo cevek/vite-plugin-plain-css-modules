@@ -50,8 +50,12 @@ export function plainCssModules(): Plugin {
         return name;
     }
 
+    // Published at once: deleting a module nothing imports makes Vite send a full reload right after
+    // `watchChange`, and a debounced report would reach no page.
     function forget(file: string): void {
-        if (collisions.forget(modulePath(file))) schedulePublish();
+        if (!collisions.forget(modulePath(file)) || !server) return;
+        clearTimeout(timer);
+        publish();
     }
 
     // generateScopedName fires once per class; one report per burst of compiled modules.

@@ -84,7 +84,8 @@ describe('vite dev', () => {
             await expect
                 .poll(() => dev.consoled.filter((m) => m.type === 'info').map((m) => m.text))
                 .toContainEqual(expect.stringMatching(/collisions resolved/));
-            // Vite itself may reload the page after the deletion; that is not the plugin's doing.
+            // Vite reloads the page right after deleting a module nothing imports; the report must
+            // reach the page before that reload, so it is not debounced.
         } finally {
             await dev.page.close();
             await dev.server.close();
