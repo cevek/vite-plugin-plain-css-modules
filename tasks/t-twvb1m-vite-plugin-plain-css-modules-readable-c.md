@@ -1,0 +1,35 @@
+---
+id: t-twvb1m
+title: 'vite-plugin-plain-css-modules: readable CSS-module class names with a built-in collision guard'
+status: in-progress
+priority: medium
+author: mb-777f7ebc
+assignee: mb-777f7ebc
+created: '2026-11-08T18:00:16.879Z'
+---
+## Problem
+`amiro` names CSS-module classes `<FileBase>_<local>` (no hash) through an inline `css.modules.generateScopedName` in `vite.config.ts`, and relies on a git pre-commit script (`scripts/check-scss-collisions.sh`) to keep `*.module.scss` basenames unique. The naming and its guard live in two places; the guard runs only at commit time and only in that repo. The existing npm package `vite-plugin-readable-css-modules` (arusak, 0.7.0) is dev-only, matches only `.module.css` (a `.module.scss` yields an empty prefix) and has no collision check, so it does not cover this.
+
+## План
+**Scope** — new standalone package `~/Dev/vite-plugin-plain-css-modules` (ESM, TypeScript → `dist/`, peer `vite ^8`). `amiro` is not touched; publishing is a separate, user-approved step.
+
+**API** — `plugins: [plainCssModules()]`, zero config. The plugin's `config` hook sets `css.modules.generateScopedName`.
+
+**Naming** — prefix = file basename minus `.module.<css|scss|sass|less|styl|stylus|pcss|postcss|sss>`, `?query` stripped, runs of `[^A-Za-z0-9_-]` → `_` (TanStack route files such as `patients_.$id`), `_` prepended when the prefix starts with `-?digit` (invalid selector otherwise). Class = `${prefix}_${local}`. Same output as amiro's function for every amiro input.
+
+**Collision source** (fork: scan the filesystem vs record inside `generateScopedName`) → record. `Map<prefix, Set<file>>` filled by `generateScopedName`: no directory config to guess, unused/dead files never report, linked packages outside root are covered. Cost: in dev a collision surfaces when the second module is compiled — exactly when it can break the page. Key = sanitized prefix, so `a$b.module.scss` vs `a_b.module.scss` and `Card.module.css` vs `Card.module.scss` collide (the old script compared raw basenames and missed both). Deleted files leave the map (dev: `server.watcher` `unlink`; build `--watch`: `watchChange` delete).
+
+**Reporting**
+- build: `buildEnd` → `this.error(report)` naming every colliding file (relative to root); the build fails. Nothing is injected into the bundle.
+- dev terminal: `config.logger.warn`, debounced, printed only when the report text changes (generateScopedName fires per class).
+- dev browser: `transformIndexHtml` (serve only) injects `<script type="module" src="${base}@id/__x00__virtual:plain-css-modules/client">`; the client sends `plain-css-modules:hello` over the HMR channel and prints every `plain-css-modules:collisions` payload with `console.error` (and a `console.info` once it clears). The server answers hello with the current report and broadcasts on every change, so a reload or late connect never loses the message.
+
+**Loud misconfiguration** — throws in `configResolved`/`config` when `css.transformer === 'lightningcss'` (vite ignores `css.modules` there, the plugin would silently do nothing) and when the user config already sets `css.modules.generateScopedName` (would be silently overridden).
+
+**Proof (vitest, fixtures are plain `.module.css` in a temp dir, no sass)**
+1. `build()` with two `Card.module.css` in different dirs → rejects, message names both paths. Without it a broken detector stays green.
+2. clean `build()` with a route-style file `patients_.$id.module.css` → emitted CSS carries the class amiro's function (copied verbatim as oracle) produces, and `dist` contains no `plain-css-modules` client code.
+3. dev: `createServer` + `listen` on a free port; fetch `index.html` → script tag present; fetch the client module url → 200; load both colliding modules, connect a real HMR WebSocket (`vite-hmr` protocol, token), send hello → collision payload names both files; terminal logger got one warn.
+4. misconfiguration: lightningcss and a user `generateScopedName` both throw.
+
+**Reviewers** — bug-reviewer (codex) on the full diff.
