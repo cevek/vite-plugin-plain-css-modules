@@ -32,6 +32,17 @@ describe('vite build', () => {
         await expect(build(config(root))).rejects.toThrow(/\.A_b_c[\s\S]*A\.module\.css[\s\S]*A_b\.module\.css/);
     });
 
+    it('counts a module that is only pulled in through composes', async () => {
+        const {root} = fixture({
+            'index.html': page,
+            'main.js': `import e from './Entry.module.css'; import b from './b/Card.module.css'; console.log(e, b);`,
+            'Entry.module.css': `.root { composes: root from './a/Card.module.css'; }`,
+            'a/Card.module.css': '.root { color: red }',
+            'b/Card.module.css': '.root { color: blue }',
+        });
+        await expect(build(config(root))).rejects.toThrow(/a\/Card\.module\.css[\s\S]*b\/Card\.module\.css/);
+    });
+
     it('emits plain class names and no dev client', async () => {
         const {root} = fixture({
             'index.html': page,

@@ -47,3 +47,11 @@ A consumer's `vite.config.ts` also drives vitest, whose `pre` plugins (`vitest`,
 - Duplicate browser report found by the dev test: the hello answer and the post-compile broadcast carry the same text → the client prints a report only when it differs from the last one shown.
 - `transform` forget (pre) and publish (post, companion plugin `plain-css-modules:settle`) are split so a recompile never flashes "resolved" between forgetting and re-recording.
 - Live check on amiro (temporary config outside the repo, inline `generateScopedName` removed, plugin added): `vite build` CSS md5 and every asset file name equal to the original build.
+
+## Bug review round 1 (mb-1932e449, a7bac2e) — 3 BLOCK, fixed
+Root of all three: the registry dropped a file at the *start* of a transform (pre-hook forget) and relied on the compile to re-record it.
+- `?raw` (and any request vite:css skips) forgot a compiled module without re-recording → false "resolved".
+- A failing Sass/PostCSS compile forgot the last good names → false "resolved" while the old CSS still runs.
+- `composes: x from './a/Card.module.css'` names a/Card through postcss-modules' FileSystemLoader (fs read, not a bundler module) → the `getModuleIds` filter dropped it and a real collision built green.
+Fix: replacement keyed on the compiled source — `generateScopedName`'s third argument is the CSS of `filename` itself; a source the file was not recorded with means a compile reached naming, and only then are the file's old names replaced. The pre/post transform pair (and the companion plugin) is gone. Build liveness = recorded in this build cycle (`buildStart` bumps it; composed files included) OR in the graph (watch-mode cached modules).
+Accepted residue: a module edited to declare no local class at all never reaches `generateScopedName`, so its old names stay counted in dev until the file is deleted or the server restarts (loud false positive, not a silent miss). Under `build --watch`, a file reached only through `composes` from an *unchanged* cached owner is not re-recorded in that cycle and drops out of the check for that rebuild.

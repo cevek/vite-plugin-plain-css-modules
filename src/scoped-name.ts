@@ -4,9 +4,6 @@ export function modulePath(filename: string): string {
     return filename.replace(/[?#].*$/, '').replace(/\\/g, '/');
 }
 
-export function isCssModule(id: string): boolean {
-    return CSS_MODULE_SUFFIX.test(modulePath(id));
-}
 
 /**
  * `Card.module.scss` → `Card`. Characters a class selector cannot hold collapse into `_`

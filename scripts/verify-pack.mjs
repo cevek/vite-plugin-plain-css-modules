@@ -13,8 +13,8 @@ if (missing.length || stray.length) {
 }
 
 const {plainCssModules} = await import('../dist/index.js');
-const plugins = plainCssModules();
-if (!Array.isArray(plugins) || plugins[0]?.name !== 'plain-css-modules') {
+const plugin = plainCssModules();
+if (plugin?.name !== 'plain-css-modules') {
     console.error('verify-pack: dist/index.js does not produce the plugin');
     process.exit(1);
 }

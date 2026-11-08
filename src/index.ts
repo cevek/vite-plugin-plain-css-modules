@@ -1,6 +1,6 @@
 import type {Plugin, PluginOption, ResolvedConfig, ViteDevServer} from 'vite';
 import {CollisionRegistry, PLUGIN_NAME} from './collisions.js';
-import {classPrefix, isCssModule, modulePath, scopedName} from './scoped-name.js';
+import {classPrefix, modulePath, scopedName} from './scoped-name.js';
 
 export {classPrefix, scopedName} from './scoped-name.js';
 
@@ -32,7 +32,7 @@ if (import.meta.hot) {
  * every compiled module: a collision fails `vite build` and is reported to the terminal and the
  * browser console in dev.
  */
-export function plainCssModules(): Plugin[] {
+export function plainCssModules(): Plugin {
     const collisions = new CollisionRegistry();
     let config: ResolvedConfig;
     let server: ViteDevServer | undefined;
@@ -42,28 +42,17 @@ export function plainCssModules(): Plugin[] {
     // `css.modules.classNameStrategy`) from a `pre` config hook, and a test run has no page to warn.
     let active = true;
 
-    function generateScopedName(local: string, filename: string): string {
+    // Also called for files pulled in by `composes: x from './Other.module.css'`, which are not
+    // modules of the bundler graph; `css` is the source of `filename` itself.
+    function generateScopedName(local: string, filename: string, css: string): string {
         const name = scopedName(local, filename);
-        if (collisions.record(modulePath(filename), classPrefix(filename), name)) schedulePublish();
+        if (collisions.record(modulePath(filename), css, classPrefix(filename), name)) schedulePublish();
         return name;
     }
 
     function forget(file: string): void {
         if (collisions.forget(modulePath(file))) schedulePublish();
     }
-
-    // Publishing between forgetting a recompiled module and its re-recording would flash a
-    // "resolved" for a collision that still stands, so the companion plugin publishes after compile.
-    const settle: Plugin = {
-        name: `${PLUGIN_NAME}:settle`,
-        transform: {
-            order: 'post',
-            handler(_code, id) {
-                if (active && isCssModule(id)) schedulePublish();
-                return undefined;
-            },
-        },
-    };
 
     // generateScopedName fires once per class; one report per burst of compiled modules.
     function schedulePublish(): void {
@@ -82,7 +71,7 @@ export function plainCssModules(): Plugin[] {
         server?.ws.send(REPORT_EVENT, report);
     }
 
-    const main: Plugin = {
+    return {
         name: PLUGIN_NAME,
 
         config(userConfig) {
@@ -126,14 +115,8 @@ export function plainCssModules(): Plugin[] {
             devServer.httpServer?.once('close', () => clearTimeout(timer));
         },
 
-        // A recompiled module re-records its names; whatever it no longer declares must not linger.
-        // `pre`: before `vite:css` compiles the module and calls generateScopedName.
-        transform: {
-            order: 'pre',
-            handler(_code, id) {
-                if (active && isCssModule(id)) collisions.forget(modulePath(id));
-                return undefined;
-            },
+        buildStart() {
+            collisions.nextCycle();
         },
 
         watchChange(id, change) {
@@ -161,14 +144,17 @@ export function plainCssModules(): Plugin[] {
 
         buildEnd(error) {
             if (!active || error || server) return;
-            // Under `build --watch` the registry outlives a removed import; only this build's graph counts.
-            const live = new Set(Array.from(this.getModuleIds(), modulePath));
-            const report = collisions.report(config.root, (file) => live.has(file));
+            // Under `build --watch` the registry outlives a removed import: a file counts when this
+            // cycle compiled it (composed files included) or it is in this build's graph (cached).
+            const graph = new Set(Array.from(this.getModuleIds(), modulePath));
+            const report = collisions.report(
+                config.root,
+                (file) => collisions.recordedThisCycle(file) || graph.has(file),
+            );
             if (report) this.error(report);
         },
     };
 
-    return [main, settle];
 }
 
 function hasVitestPlugin(plugins: PluginOption[] | undefined): boolean {

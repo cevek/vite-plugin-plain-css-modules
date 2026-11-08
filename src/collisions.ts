@@ -48,18 +48,42 @@ export class CollisionRegistry {
     private readonly prefixes = new Owners();
     private readonly names = new Owners();
     private readonly prefixOf = new Map<string, string>();
+    private readonly sourceOf = new Map<string, string>();
+    private readonly cycleOf = new Map<string, number>();
+    private cycle = 0;
 
-    /** Returns true when this changed the registry. */
-    record(file: string, prefix: string, name: string): boolean {
+    /** Starts a build cycle; `recordedThisCycle` tells which files the cycle compiled. */
+    nextCycle(): void {
+        this.cycle++;
+    }
+
+    recordedThisCycle(file: string): boolean {
+        return this.cycleOf.get(file) === this.cycle;
+    }
+
+    /**
+     * `source` is the module's CSS as compiled now. A source the file was not recorded with means a
+     * fresh compile reached naming, so the file's previous names are replaced. Nothing is dropped
+     * before that point: a compile that fails, or a request that never compiles (`?raw`), leaves the
+     * last successful names in place. Returns true when this changed the registry.
+     */
+    record(file: string, source: string, prefix: string, name: string): boolean {
+        this.cycleOf.set(file, this.cycle);
+        let replaced = false;
+        if (this.sourceOf.get(file) !== source) {
+            replaced = this.forget(file);
+            this.sourceOf.set(file, source);
+        }
         this.prefixOf.set(file, prefix);
         const newPrefix = this.prefixes.add(prefix, file);
         const newName = this.names.add(name, file);
-        return newPrefix || newName;
+        return replaced || newPrefix || newName;
     }
 
     /** Returns true when the file was known. */
     forget(file: string): boolean {
         this.prefixOf.delete(file);
+        this.sourceOf.delete(file);
         const hadPrefix = this.prefixes.removeFile(file);
         const hadNames = this.names.removeFile(file);
         return hadPrefix || hadNames;
