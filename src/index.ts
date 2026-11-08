@@ -43,10 +43,10 @@ export function plainCssModules(): Plugin {
     let active = true;
 
     // Also called for files pulled in by `composes: x from './Other.module.css'`, which are not
-    // modules of the bundler graph; `css` is the source of `filename` itself.
-    function generateScopedName(local: string, filename: string, css: string): string {
+    // modules of the bundler graph.
+    function generateScopedName(local: string, filename: string): string {
         const name = scopedName(local, filename);
-        if (collisions.record(modulePath(filename), css, classPrefix(filename), name)) schedulePublish();
+        if (collisions.record(modulePath(filename), classPrefix(filename), name)) schedulePublish();
         return name;
     }
 

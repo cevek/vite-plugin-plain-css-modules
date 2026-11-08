@@ -46,7 +46,8 @@ describe('vite dev registry', () => {
         }
     });
 
-    it('drops the names a recompiled module no longer declares', async () => {
+    // postcss-modules names `.other` and only then rejects the missing `composes` target.
+    it('keeps a standing collision when a compile fails after naming some classes', async () => {
         const dev = await devServer({
             'A.module.css': '.b_c { color: red }',
             'A_b.module.css': '.c { color: blue }',
@@ -56,9 +57,10 @@ describe('vite dev registry', () => {
             await dev.compile('/A_b.module.css');
             await expect.poll(() => dev.log).toEqual([expect.stringMatching(/^warn [\s\S]*\.A_b_c/)]);
 
-            dev.write('A.module.css', '.other { color: red }');
+            dev.write('A.module.css', '.other { composes: missing; color: red }');
             await dev.compile('/A.module.css');
-            await expect.poll(() => dev.log).toEqual([expect.any(String), expect.stringMatching(/^info .*resolved/)]);
+            await dev.settled();
+            expect(dev.log).toHaveLength(1);
         } finally {
             await dev.server.close();
         }

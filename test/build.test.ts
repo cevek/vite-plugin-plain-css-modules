@@ -65,32 +65,43 @@ describe('vite build', () => {
         });
         const watcher = (await build(config(root, {build: {watch: {}}}))) as Rolldown.RolldownWatcher;
         const outcomes: string[] = [];
-        let settled: (() => void) | undefined;
         watcher.on('event', (event) => {
             if (event.code === 'BUNDLE_END' || event.code === 'ERROR') {
                 outcomes.push(event.code === 'ERROR' ? `error ${event.error.message}` : 'ok');
                 event.result?.close();
-                settled?.();
             }
         });
-        const next = () => new Promise<void>((resolve) => (settled = resolve));
+        // The watcher may rebuild once more on the fixture's own fresh files; wait until it is quiet.
+        const quiet = async () => {
+            let seen = -1;
+            while (seen !== outcomes.length) {
+                seen = outcomes.length;
+                await new Promise((resolve) => setTimeout(resolve, 400));
+            }
+        };
+        const last = () => outcomes.at(-1);
         try {
-            await expect.poll(() => outcomes.length).toBe(1);
-            const imported = next();
+            await expect.poll(() => outcomes.length, {timeout: 10_000}).toBeGreaterThan(0);
+            await quiet();
+            expect(last()).toBe('ok');
+
+            let count = outcomes.length;
             write('main.js', `import a from './a/Card.module.css'; import b from './b/Card.module.css'; console.log(a, b);`);
-            await imported;
-            const dropped = next();
+            await expect.poll(() => outcomes.length, {timeout: 10_000}).toBeGreaterThan(count);
+            await quiet();
+            expect(last()).toMatch(/^error [\s\S]*b\/Card\.module\.css/);
+
+            count = outcomes.length;
             // b/Card.module.css stays on disk; it is just no longer part of the build.
             write('main.js', `import a from './a/Card.module.css'; console.log(a);`);
-            await dropped;
+            await expect.poll(() => outcomes.length, {timeout: 10_000}).toBeGreaterThan(count);
+            await quiet();
+            expect(last()).toBe('ok');
         } finally {
             await watcher.close();
         }
-        expect(outcomes[0]).toBe('ok');
-        expect(outcomes[1]).toMatch(/^error [\s\S]*b\/Card\.module\.css/);
-        expect(outcomes[2]).toBe('ok');
         expect(fs.existsSync(path.join(root, 'b/Card.module.css'))).toBe(true);
-    });
+    }, 30_000);
 
     it('refuses a config where it would silently do nothing', async () => {
         const {root} = fixture({'index.html': page, 'main.js': ''});

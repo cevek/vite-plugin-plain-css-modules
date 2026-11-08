@@ -72,14 +72,19 @@ describe('vite dev', () => {
             await expect
                 .poll(() => dev.consoled.filter((m) => m.type === 'error').map((m) => m.text))
                 .toEqual([expect.stringMatching(/b\/Card\.module\.css/)]);
+            // The page never reloaded: the report reached a live page through the HMR channel.
+            expect(dev.consoled.filter((m) => m.text.includes('[vite] connected'))).toHaveLength(1);
 
+            const hotUpdates = () => dev.consoled.filter((m) => m.text.includes('hot updated: /main.js')).length;
+            const before = hotUpdates();
             dev.write('main.js', importsA);
+            // Deleting a file the page still imports would make Vite reload instead of hot-update.
+            await expect.poll(hotUpdates).toBe(before + 1);
             dev.remove('b/Card.module.css');
             await expect
                 .poll(() => dev.consoled.filter((m) => m.type === 'info').map((m) => m.text))
                 .toContainEqual(expect.stringMatching(/collisions resolved/));
-            // The page never reloaded: the reports above reached a live page through the HMR channel.
-            expect(dev.consoled.filter((m) => m.text.includes('[vite] connected'))).toHaveLength(1);
+            // Vite itself may reload the page after the deletion; that is not the plugin's doing.
         } finally {
             await dev.page.close();
             await dev.server.close();

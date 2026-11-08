@@ -48,7 +48,6 @@ export class CollisionRegistry {
     private readonly prefixes = new Owners();
     private readonly names = new Owners();
     private readonly prefixOf = new Map<string, string>();
-    private readonly sourceOf = new Map<string, string>();
     private readonly cycleOf = new Map<string, number>();
     private cycle = 0;
 
@@ -62,18 +61,17 @@ export class CollisionRegistry {
     }
 
     /**
-     * `source` is the module's CSS as compiled now. A source the file was not recorded with means a
-     * fresh compile reached naming, so the file's previous names are replaced. Nothing is dropped
-     * before that point: a compile that fails, or a request that never compiles (`?raw`), leaves the
-     * last successful names in place. Returns true when this changed the registry.
+     * A file's names only grow within a cycle; they are replaced the first time a new build cycle
+     * names the file. Nothing narrower is safe: no compile signals "these are now all my names" —
+     * a compile can fail after naming some classes, and one file is named both directly and, read
+     * raw, through `composes`, with different class sets. The dev server runs one cycle, so a class
+     * removed from a file keeps counting until the file is deleted or the server restarts.
+     * Returns true when this changed the registry.
      */
-    record(file: string, source: string, prefix: string, name: string): boolean {
-        this.cycleOf.set(file, this.cycle);
+    record(file: string, prefix: string, name: string): boolean {
         let replaced = false;
-        if (this.sourceOf.get(file) !== source) {
-            replaced = this.forget(file);
-            this.sourceOf.set(file, source);
-        }
+        if (this.cycleOf.has(file) && this.cycleOf.get(file) !== this.cycle) replaced = this.forget(file);
+        this.cycleOf.set(file, this.cycle);
         this.prefixOf.set(file, prefix);
         const newPrefix = this.prefixes.add(prefix, file);
         const newName = this.names.add(name, file);
@@ -83,7 +81,7 @@ export class CollisionRegistry {
     /** Returns true when the file was known. */
     forget(file: string): boolean {
         this.prefixOf.delete(file);
-        this.sourceOf.delete(file);
+        this.cycleOf.delete(file);
         const hadPrefix = this.prefixes.removeFile(file);
         const hadNames = this.names.removeFile(file);
         return hadPrefix || hadNames;
